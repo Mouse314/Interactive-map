@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <canvas id="main-map" width="700" height="700"></canvas>
+
+    <input type="color" name="color" id="color">
+    <input type="range" id="width" min="1" max="10" value="3">
+    <p>Толщина: <span id="rangeValue">5</span></p>
+
+    <div class="mode-selector">
+        <label><input type="radio" name="mode" id="is-map-drag" checked="true"> Двигать карту</label>
+        <label><input type="radio" name="mode" id="is-pointing"> Точки</label>
+        <label><input type="radio" name="mode" id="is-draw"> Линия от руки</label>
+        <label><input type="radio" name="mode" id="is-lining"> Ломаная линия</label>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
