@@ -11,6 +11,17 @@ const is_map_drag = document.getElementById("is-map-drag");
 const is_points = document.getElementById("is-pointing");
 const is_draw = document.getElementById("is-draw");
 const is_line = document.getElementById("is-lining");
+// Контроллеры анимации
+const button_prev = document.getElementById("prev");
+const button_next = document.getElementById("next");
+const button_play = document.getElementById("play");
+const textbox = document.getElementById("textbox");
+const anim_delay = document.getElementById("anim-delay");
+const anim_text = document.getElementById("anim-val");
+const is_copy_obj_newday = document.getElementById("copy-next-day-checkbox");
+const delete_last_day = document.getElementById("delete-last-day");
+var day = 0;
+var max_day = 0;
 
 // Перетаскивание карты и линий
 let map_drag = false;
@@ -22,7 +33,7 @@ let prev_y;
 let pointer;
 
 // Список объектов карты
-var objects = []
+var objects = [[]]
 
 // Глобальное позиционирование карты
 var center = [1, -1];
@@ -42,6 +53,10 @@ var button_pressed = 0;
 // Курсор
 var cursor = [false];
 
+
+
+
+
 // СОБЫТИЯ МЫШИ
 canvas.addEventListener("mousedown", function (e) {
     let x = e.offsetX;
@@ -53,7 +68,19 @@ canvas.addEventListener("mousedown", function (e) {
 
     map_drag = true;
 
-    if (is_draw.checked) {
+    // Создаём точку
+    if (is_points.checked && button_pressed == 0) {
+        // Если не на точке курсор
+        if (cursor[0]) {
+            line_drag = true;
+        }
+        else {
+            instantiate("point", screenToWorldPoint([e.offsetX, e.offsetY]), [0, 0], color_el.value, width_el.value);
+            update_objects();
+        }
+    }
+    // Рисуем линию от руки
+    else if (is_draw.checked) {
         current_line = []
 
         ctx.beginPath();
@@ -70,14 +97,14 @@ canvas.addEventListener("mousedown", function (e) {
                 line_drag = true;
                 // Если растягиваем сегмент
                 if (cursor[1] == "overline") {
-                    objects[cursor[5][0]][1].splice(cursor[5][1] + 1, 0, screenToWorldPoint([x, y]));
+                    objects[day][cursor[5][0]][1].splice(cursor[5][1] + 1, 0, screenToWorldPoint([x, y]));
                 }
             }
             // Начинаем новую
             else {
                 current_line.push(screenToWorldPoint([x, y]));
                 instantiate("point", screenToWorldPoint([x, y]), [0, 0], color_el.value, width_el.value);
-                objects.push(["frontline", current_line, color_el.value, width_el.value]);
+                objects[day].push(["frontline", current_line, color_el.value, width_el.value]);
                 update_objects();
             }
         }
@@ -85,8 +112,8 @@ canvas.addEventListener("mousedown", function (e) {
         else {
             let w_pos = screenToWorldPoint([x, y]);
             current_line.push(w_pos);
-            objects[objects.length - 1][1].push(w_pos);
-            objects[objects.length - 1][1].pop();
+            objects[day][objects[day].length - 1][1].push(w_pos);
+            objects[day][objects[day].length - 1][1].pop();
             update_objects();
         }
     }
@@ -136,31 +163,48 @@ canvas.addEventListener("mousemove", function (e) {
         ctx.fill();
         ctx.stroke();     
     }
-    // Режим редактирования ломаной линии
-    else if (is_line.checked && current_line.length == 0){
+
+    // Режим перемещения объектов и курсора
+    if ((is_line.checked && current_line.length == 0) || (is_points.checked)){
         update_objects();
 
         if (line_drag) {
             let world_point = screenToWorldPoint([x, y]);
-            if (cursor[1] == "vertex") {
+            if (cursor[1] == "point" && map_drag) {
                 cursor[2] = world_point;
-                objects[cursor[5][0]][1][cursor[5][1]] = world_point;
+                objects[day][cursor[5][0]][1] = world_point;
+            }
+            else if (cursor[1] == "vertex") {
+                cursor[2] = world_point;
+                objects[day][cursor[5][0]][1][cursor[5][1]] = world_point;
             }
             else if (cursor[1] == "overline") {
                 cursor[2] = world_point;
-                objects[cursor[5][0]][1][cursor[5][1] + 1] = world_point;
+                objects[day][cursor[5][0]][1][cursor[5][1] + 1] = world_point;
             }
         }
 
-        for (let i = 0; i < objects.length; i++) {
-            let obj = objects[i];
-            if (obj[0] == "frontline") {
+        for (let i = 0; i < objects[day].length; i++) {
+            let obj = objects[day][i];
+
+            // Если точка
+            if (obj[0] == "point" && is_points.checked) {
+                if (!cursor[0]) {
+                    let point_screen = worldToScreenPoint(obj[1]);
+                    if (distance([x, y], point_screen) <= 10) {
+                        set_cursor("point", obj[1], "brown", 10, [i]);
+                    }
+                }
+            }
+
+            // Если ломаная линия (линия фронта)
+            else if (obj[0] == "frontline" && is_line.checked) {
                 // Пробегаемся по вершинам ломаной
                 for (let j = 0; j < obj[1].length; j++) {
                     let vertex_screen = worldToScreenPoint([obj[1][j][0], obj[1][j][1]])
                     // Устанавливаем курсор на вершине
-                    if (!cursor[0] || cursor[1] == "overline"){
-                        if (distance([x, y], vertex_screen) <= 10){
+                    if (!cursor[0] || cursor[1] == "overline") {
+                        if (distance([x, y], vertex_screen) <= 10) {
                             set_cursor("vertex", obj[1][j], "brown", 10, [i, j]);
                             break;
                         }
@@ -192,13 +236,22 @@ canvas.addEventListener("mousemove", function (e) {
     }
 });
 canvas.addEventListener("mouseup", function (e) {
+    let is_mouse_stable = e.offsetX == pointer[0] && e.offsetY == pointer[1];
+
     map_drag = false;
     
     if (line_drag) {
-        if (e.offsetX == pointer[0] && e.offsetY == pointer[1]) {
+        // Если линия оказалась стабильной
+        if (is_mouse_stable) {
+            // Удаляем точку
+            if (cursor[1] == "point") {
+                objects[day].splice(cursor[5][0], 1);
+                cursor[0] = false;
+                update_objects();
+            }
+            // Удаляем вершину ломаной линии
             if (cursor[1] == "vertex") {
-                // Удаляем точку
-                objects[cursor[5][0]][1].splice(cursor[5][1], 1);
+                objects[day][cursor[5][0]][1].splice(cursor[5][1], 1);
                 cursor[0] = false;
                 update_objects();
             }
@@ -206,17 +259,13 @@ canvas.addEventListener("mouseup", function (e) {
     }
     line_drag = false;
     if (is_draw.checked) {
-        // Создаём объект
-        if (e.offsetX != pointer[0] && e.offsetY != pointer[1]) {
+        // Создаём линию от руки
+        if (!is_mouse_stable) {
             if (current_line.length > 0) {
-                objects.push(["line", current_line, color_el.value, width_el.value]);
+                objects[day].push(["line", current_line, color_el.value, width_el.value]);
                 update_objects();
             }
         }
-    }
-    else if (is_points.checked) {
-        instantiate("point", screenToWorldPoint([e.offsetX, e.offsetY]), [0, 0], color_el.value, width_el.value);
-        update_objects();
     }
 });
 
@@ -224,17 +273,24 @@ canvas.addEventListener("mouseup", function (e) {
 width_el.addEventListener("input", function (e) {
     width_output.textContent = this.value;
 });
+is_draw.addEventListener("click", function (e) {
+    current_line = [];
+});
+is_line.addEventListener("click", function (e) {
+    current_line = [];
+});
+
 
 
 // СОБЫТИЯ КЛАВИАТУРЫ
 document.addEventListener("keydown", function (e) {
     if (e.ctrlKey && (e.key === 'z' || e.key === 'я')) { 
-        objects.pop();
+        objects[day].pop();
         update_objects();
     }
     if (e.key === 'Enter' && is_line.checked) {
         current_line = [];
-        objects.splice(objects.length - 2, 1)
+        objects[day].splice(objects[day].length - 2, 1)
         update_objects();
     }
     if (e.key === 'Escape' && is_line.checked && current_line.length > 0){
@@ -243,9 +299,10 @@ document.addEventListener("keydown", function (e) {
 });
 
 
-var zoom_intencity = 0.1;
 
-// Зуммирование
+
+// ЗУММИРОВАНИЕ
+var zoom_intencity = 0.1;
 canvas.addEventListener("wheel", function (e) {
 
     cursor_world = screenToWorldPoint([e.offsetX, e.offsetY]);
@@ -320,49 +377,38 @@ function Setline(points, color) {
     ctx.fillStyle = color;
 }
 
-function getDistance(point1, point2){
-    return Math.sqrt(Math.pow(point2[0] - point1[0], 2) + Math.pow(point2[1] - point1[1], 2));
-}
-
 
 
 // ПРОЕКЦИЯ
 function getProjectionPoint(segmentStart, segmentEnd, point) {
-    // Координаты начала и конца отрезка
     const x1 = segmentStart[0], y1 = segmentStart[1];
     const x2 = segmentEnd[0], y2 = segmentEnd[1];
 
-    // Координаты точки, которую нужно спроецировать
     const px = point[0], py = point[1];
 
-    // Вектор от начала отрезка до конца отрезка
     const dx = x2 - x1;
     const dy = y2 - y1;
 
-    // Вектор от начала отрезка до точки
     const tdx = px - x1;
     const tdy = py - y1;
 
-    // Длина отрезка в квадрате
     const lenSquared = dx * dx + dy * dy;
 
-    // Если отрезок вырожден в точку
     if (lenSquared === 0) {
         return [x1, y1];
     }
 
-    // Проекция точки на бесконечную прямую, содержащую отрезок
     const t = (tdx * dx + tdy * dy) / lenSquared;
 
-    // Обрезаем t, чтобы проекция оставалась на отрезке
     const clampedT = Math.max(0, Math.min(1, t));
 
-    // Координаты проекции
     const projX = x1 + clampedT * dx;
     const projY = y1 + clampedT * dy;
 
     return [projX, projY];
 }
+
+
 
 
 
@@ -376,13 +422,13 @@ function instantiate(object, position, local_offset, color, linewidth) {
     ctx.arc(screen_position[0], screen_position[1], 5, 0, 2 * Math.PI);
     ctx.fill();
     ctx.stroke();
-    objects.push([object, position, screen_position, local_offset, color, linewidth]);
+    objects[day].push([object, position, screen_position, local_offset, color, linewidth]);
 }
 
 // Обновление
 function update_objects() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    objects.forEach(obj => {
+    objects[day].forEach(obj => {
         if (obj[0] == "point"){
             let screen_position = worldToScreenPoint(obj[1])
             obj[2] = screen_position;
@@ -423,7 +469,7 @@ function update_objects() {
     });
     // Отрисовываем курсор
     if (cursor[0]) {
-        if (cursor[1] == "vertex"){
+        if (cursor[1] == "vertex" || cursor[1] == "point"){
             screen_pos = worldToScreenPoint(cursor[2]);
             ctx.beginPath();
             ctx.fillStyle = cursor[3];
@@ -448,19 +494,28 @@ function update_objects() {
 
 function frontline_draw_deny() {
     current_line = [];
-    objects.pop();
-    objects.pop();
+    objects[day].pop();
+    objects[day].pop();
     update_objects();
 }
 
-// Работа с курсором
+// КУРСОР
 function set_cursor(mode, position, color, size, obj_data) {
     cursor = [true, mode, position, color, size, obj_data];
 }
 
 function update_cursor(mousepos) {
     if (cursor[0]){
-        if (is_line.checked){
+        if (is_points.checked){
+            if (cursor[1] == "point") {
+                pos_screen = worldToScreenPoint(cursor[2]);
+                if (distance(pos_screen, mousepos) > 10){
+                    cursor[0] = false;
+                    return;
+                }
+            }
+        }
+        if (is_line.checked) {
             if (cursor[1] == "vertex") {
                 pos_screen = worldToScreenPoint(cursor[2]);
                 if (distance(pos_screen, mousepos) > 10){
@@ -479,4 +534,62 @@ function update_cursor(mousepos) {
             }
         }
     }
+}
+
+
+// АНИМИРОВАНИЕ
+function update_day() {
+    textbox.value = `День ${day} из ${max_day}`;
+    update_objects();
+}
+
+button_prev.addEventListener("click", (e) => {
+    if (day <= 0) return;
+    day--;
+    update_day();
+});
+button_next.addEventListener("click", (e) => {
+    day++;
+    if (day > max_day) {
+        max_day = day;
+        if (is_copy_obj_newday.checked){
+            var newArr = objects[objects.length - 1].map(function func(el){
+                if(Object.prototype.toString.call(el) == "[object Array]"){
+                    return el.map(func);
+                }
+                return el;
+            });
+            objects.push(newArr);
+        }
+        else objects.push([]);
+    }
+    update_day();
+});
+delete_last_day.addEventListener("click", (e) => {
+    if (max_day == 0) return;
+    if (day == max_day) {
+        day--;
+        max_day--;
+    }
+    else {
+        max_day--;
+    }
+    objects.pop();
+    update_day();
+});
+
+anim_delay.addEventListener("input", (e) => {
+    anim_text.textContent = anim_delay.value * 100;
+});
+button_play.addEventListener("click", async (e) => {
+    day = 0;
+    while (day <= max_day) {
+        update_day();
+        await delay(anim_delay.value * 100);
+        day++;
+    }
+    update_day();
+});
+function delay(ms) { 
+    return new Promise(resolve => setTimeout(resolve, ms)); 
 }

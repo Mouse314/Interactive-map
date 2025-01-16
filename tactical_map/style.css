@@ -2,29 +2,12 @@
     border: 3px solid black;
     margin-top: 30px;
     margin-left: 30px;
-    background-image: url("http://www.world-map.ru/world-map-geo-big.jpg");
-    /* background-image: url("http://www.svali.ru/pic/pictures/91/r_m_1dfeb5ef96f37a226d3777fff66f991b.jpg"); */
+    /* background-image: url("http://www.world-map.ru/world-map-geo-big.jpg"); */
+    background-image: url("http://www.svali.ru/pic/pictures/91/r_m_1dfeb5ef96f37a226d3777fff66f991b.jpg");
+    /* background-image: url("https://opentopomap.org/#map=15/55.70720/397.55320"); */
     background-size:1000px;
 }
 
-#1 {
-    size: 50px 20px;
-}
-
-#line-cursor {
-    position:absolute;
-    border-radius: 1em;
-    background-color: chocolate;
-}
-
-.division {
-    position:absolute;
-    top: 10px;
-    color: white;
-    background-color: blue;
-    transition: background-color 1s;
-}
-.division:hover {
-    background-color: rgb(255, 136, 0);
-    border-radius: 1em;
+.mode-selector {
+    margin: 20px;
 }

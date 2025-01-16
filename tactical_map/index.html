@@ -9,15 +9,35 @@
 <body>
     <canvas id="main-map" width="700" height="700"></canvas>
 
+    <br>
+
     <input type="color" name="color" id="color">
     <input type="range" id="width" min="1" max="10" value="3">
-    <p>Толщина: <span id="rangeValue">5</span></p>
+    Толщина: <span id="rangeValue">5</span>
 
     <div class="mode-selector">
         <label><input type="radio" name="mode" id="is-map-drag" checked="true"> Двигать карту</label>
         <label><input type="radio" name="mode" id="is-pointing"> Точки</label>
         <label><input type="radio" name="mode" id="is-draw"> Линия от руки</label>
         <label><input type="radio" name="mode" id="is-lining"> Ломаная линия</label>
+    </div>
+
+    <div class="animation-controller">
+        <button id="prev"><</button>
+        <button id="next">></button>
+        <input type="text" name="textbox" id="textbox" value="День 0 из 0">
+        <button id="play">Play</button>
+        <input type="range" id="anim-delay" min="1" max="20" value="5">
+        Задержка кадра(мс): <span id="anim-val">500</span>
+
+        <br>
+
+        <input type="checkbox" name="copychb" id="copy-next-day-checkbox" checked="true" title="При снятой птичке каждый новосозданный день будет начинаться без объектов">
+        копировать все объекты в новый день
+
+        <br>
+
+        <button id="delete-last-day">Удалить последний день</button>
     </div>
 
     <script src="script.js"></script>
