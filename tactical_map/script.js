@@ -23,6 +23,9 @@ const is_copy_obj_newday = document.getElementById("copy-next-day-checkbox");
 const delete_last_day = document.getElementById("delete-last-day");
 var day = 0;
 var max_day = 0;
+// Импорт / Экспорт анимаций и объектов JSON
+const export_button = document.getElementById("exportBtn");
+const import_button = document.getElementById("importBtn");
 
 // Перетаскивание карты и линий
 let map_drag = false;
@@ -101,7 +104,44 @@ canvas.addEventListener("mousedown", function (e) {
                 if (cursor[1] == "overline") {
                     is_overline = true;
                     objects[day][cursor[5][0]][1].splice(cursor[5][1] + 1, 0, screenToWorldPoint([x, y]));
-                    // if (day != 0) objects[day - 1][cursor[5][0]][1].splice(cursor[5][1] + 1, 0, cursor[2][2]);
+                    // Добавляем перетянутую точку в предыдущий день
+                    if (day != 0) {
+                        let ind = cursor[5][1] + 1;
+                        let left_ind = cursor[5][1];
+                        let right_ind = cursor[5][1] + 1;
+
+                        console.log("Левый: " + left_ind);
+                        console.log("Правый: " + right_ind);
+                        // Пробегаемся по индексам из пердыдущего дня чтобы размешать проекции на сегменты, а не в воздухе
+                        while (left_ind > 0 && objects[day - 1][cursor[5][0]][1][left_ind].length > 2  ) {
+                            left_ind--;
+                            console.log("Ещё налево! " + left_ind);
+                        }
+                        while (right_ind < objects[day - 1][cursor[5][0]][1].length - 1 && objects[day - 1][cursor[5][0]][1][right_ind].length > 2) {
+                            right_ind++;
+                            console.log("Ещё направо! " + right_ind);
+                        }
+
+                        if (right_ind == objects[day - 1][cursor[5][0]][1].length) right_ind = 0;
+
+                        let projPoint = getProjectionPoint(objects[day - 1][cursor[5][0]][1][left_ind],
+                                    objects[day - 1][cursor[5][0]][1][right_ind],
+                                    screenToWorldPoint([x, y])
+                                );
+                        projPoint.push("edited");
+                        console.log(projPoint);
+                        
+                        objects[day - 1][cursor[5][0]][1].splice(ind, 0, projPoint);
+
+                        // Пробегаемся по точкам из анимации и увеличиваем индекс, так как вставили точку и индексы сбились
+                        transitions[day].forEach(obj => {
+                            // Если точка на линии
+                            if (obj[0].length == 2) {
+                                if (obj[0][1] >= ind)
+                                    obj[0][1]++;
+                            }
+                        });
+                    }
                 }
             }
             // Начинаем новую
@@ -247,29 +287,29 @@ canvas.addEventListener("mouseup", function (e) {
 
     map_drag = false;
     
-    if (cursor[0] && line_drag && !is_mouse_stable) {
+    // Добавляем анимацию
+    if (cursor[0] && line_drag && !is_mouse_stable && day > 0) {
         ind = find_el(transitions[day], cursor[5]);
         if (is_points.checked) {
             if (ind != -1) {
                 transitions[day][ind][1][1] = screenToWorldPoint([e.offsetX, e.offsetY]);
             }
             else {
-                transitions[day].push([[cursor[5][0]], [screenToWorldPoint(pointer), screenToWorldPoint([e.offsetX, e.offsetY])]]);
+                transitions[day].push([[cursor[5][0]], [objects[day - 1][cursor[5][0]][1], screenToWorldPoint([e.offsetX, e.offsetY])]]);
             }
-            console.log(transitions);
         }
         if (is_line.checked) {
             if (is_overline) {
-                console.log(1111);
-                transitions[day].push([[cursor[5][0], cursor[5][1]], [screenToWorldPoint(pointer), screenToWorldPoint([e.offsetX, e.offsetY])]]);
+                console.log(cursor);
+                console.log(objects[day - 1][cursor[5][0]][1][cursor[5][1]]);
+                transitions[day].push([[cursor[5][0], cursor[5][1]], [[objects[day - 1][cursor[5][0]][1][cursor[5][1]][0], objects[day - 1][cursor[5][0]][1][cursor[5][1]][1]], screenToWorldPoint([e.offsetX, e.offsetY])]]);
             }
             else {
                 if (ind != -1)
                     transitions[day][ind][1][1] = screenToWorldPoint([e.offsetX, e.offsetY]);
                 else 
-                    transitions[day].push([[cursor[5][0], cursor[5][1]], [screenToWorldPoint(pointer), screenToWorldPoint([e.offsetX, e.offsetY])]]);
+                    transitions[day].push([[cursor[5][0], cursor[5][1]], [[objects[day - 1][cursor[5][0]][1][cursor[5][1]][0], objects[day - 1][cursor[5][0]][1][cursor[5][1]][1]], screenToWorldPoint([e.offsetX, e.offsetY])]]);
             }
-            console.log(transitions);
         }
     }
     if (line_drag) {
@@ -693,8 +733,7 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms)); 
 }
 
-
-
+// Копирование многомерного массива
 function copy(arr) {
     let newArr = arr.map(function func(el){
         if(Object.prototype.toString.call(el) == "[object Array]"){
@@ -704,3 +743,29 @@ function copy(arr) {
     });
     return newArr;
 }
+
+// Сохранение и загрузка из файла
+// Сохранение в файл
+document.getElementById('exportBtn').addEventListener('click', () => { 
+    const jsonString = JSON.stringify([objects, transitions]); 
+    const blob = new Blob([jsonString], { type: 'application/json' }); 
+    const url = URL.createObjectURL(blob); 
+    const a = document.createElement('a'); 
+    a.href = url; 
+    a.download = 'myMap.json'; 
+    a.click(); 
+});
+
+// Загрузка из файла
+document.getElementById('importFile').addEventListener('change', (event) => { 
+    const file = event.target.files[0]; 
+    const reader = new FileReader(); 
+    reader.onload = (e) => { 
+        const json = JSON.parse(e.target.result); 
+        [objects, transitions] = json;
+        max_day = objects.length;
+        day = 0;
+        update_objects(objects[day]);
+    }; 
+    reader.readAsText(file); 
+});

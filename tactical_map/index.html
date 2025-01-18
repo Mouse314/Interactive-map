@@ -35,10 +35,14 @@
 
         <input type="checkbox" name="copychb" id="copy-next-day-checkbox" checked="true" title="При снятой птичке каждый новосозданный день будет начинаться без объектов">
         копировать все объекты в новый день
+        <button id="delete-last-day">Удалить последний день</button>
 
         <br>
 
-        <button id="delete-last-day">Удалить последний день</button>
+        <button id="exportBtn">Сохранить в JSON</button>
+        <input type="file" id="importFile" accept=".json">
+        <pre id="output"></pre>
+
     </div>
 
     <script src="script.js"></script>
