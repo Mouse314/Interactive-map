@@ -134,13 +134,7 @@ canvas.addEventListener("mousedown", function (e) {
                         objects[day - 1][cursor[5][0]][1].splice(ind, 0, projPoint);
 
                         // Пробегаемся по точкам из анимации и увеличиваем индекс, так как вставили точку и индексы сбились
-                        transitions[day].forEach(obj => {
-                            // Если точка на линии
-                            if (obj[0].length == 2) {
-                                if (obj[0][1] >= ind)
-                                    obj[0][1]++;
-                            }
-                        });
+                        animShift("plus", ind)
                     }
                 }
             }
@@ -323,9 +317,115 @@ canvas.addEventListener("mouseup", function (e) {
             }
             // Удаляем вершину ломаной линии
             if (cursor[1] == "vertex") {
-                objects[day][cursor[5][0]][1].splice(cursor[5][1], 1);
-                cursor[0] = false;
-                update_objects(objects[day]);
+                // Если в области не более трёх сегментов - не трогаем
+                if (objects[day][cursor[5][0]][1].length <= 3) return;
+                // Если первый день
+                if (day == 0) {
+                    objects[day][cursor[5][0]][1].splice(cursor[5][1], 1);
+                    cursor[0] = false;
+                    update_objects(objects[day]);
+                }
+                // Иначе (есть анимации)
+                else {
+                    // Если удаляется точка, добавленная на этом кадре (всё просто)
+                    let ind = cursor[5][1];
+                    let set_ind = ind;
+                    for (let i = 0; i <= ind; i++) {
+                        if (objects[day - 1][cursor[5][0]][1][i].length >= 4) {
+                            set_ind ++;
+                        }
+                    }
+                    ind = set_ind;
+
+                    if (objects[day - 1][cursor[5][0]][1][ind].length == 3) {
+
+                        console.log("simple delete");
+
+                        objects[day][cursor[5][0]][1].splice(cursor[5][1], 1);
+                        objects[day - 1][cursor[5][0]][1].splice(cursor[5][1], 1);
+
+                        let vertex_end = find_el(transitions[day], cursor[5]);
+                        if (vertex_end != -1) transitions[day].splice(vertex_end, 1);
+
+                        cursor[0] = false;
+                        animShift("minus", cursor[5][1]);
+                        update_objects(objects[day]);
+                    }
+                    // Если удаляем точку из предыдущего кадра (сложнее, нужно сжимать анимацией)
+                    else {
+                        let ind = cursor[5][1];
+                        let set_ind = ind;
+                        for (let i = 0; i <= ind; i++) {
+                            if (objects[day - 1][cursor[5][0]][1][i].length >= 4) {
+                                set_ind++;
+                                console.log("affected " + i);
+                            }
+                        }
+                        ind = set_ind;
+
+                        let left_stop_ind = (ind - 1);
+                        let right_stop_ind = (ind + 1);
+                        
+                        if (left_stop_ind == -1) left_stop_ind = objects[day - 1][cursor[5][0]][1].length - 1;
+                        if (right_stop_ind == objects[day - 1][cursor[5][0]][1].length) right_stop_ind = 0;
+
+                        let touched_deletions = [ind];
+
+                        console.log("Слева: " + left_stop_ind);
+                        console.log("Справа: " + right_stop_ind);
+
+                        // Ищем края нового удаления (возможно, через предыдущие удаления)
+                        while (objects[day - 1][cursor[5][0]][1][left_stop_ind].length >= 4) {
+                            touched_deletions.push(left_stop_ind);
+                            left_stop_ind--;
+                            console.log("Ещё налево, стало " + left_stop_ind);
+                            if (left_stop_ind == -1) left_stop_ind = objects[day - 1][cursor[5][0]][1].length - 1;
+                        }
+                        while (objects[day - 1][cursor[5][0]][1][right_stop_ind].length >= 4) {
+                            touched_deletions.push(right_stop_ind);
+                            right_stop_ind++;
+                            console.log("Ещё направо, стало " + right_stop_ind);
+                            if (right_stop_ind == objects[day - 1][cursor[5][0]][1].length) right_stop_ind = 0;
+                        }
+
+                        console.log("Слева: " + left_stop_ind);
+                        console.log("Справа: " + right_stop_ind);
+
+                        // Схлопываем это и предыдущее удаление
+                        let pos_left = objects[day - 1][cursor[5][0]][1][left_stop_ind];
+                        let pos_right = objects[day - 1][cursor[5][0]][1][right_stop_ind];
+                        let current_point = objects[day - 1][cursor[5][0]][1][ind];
+
+                        console.log(touched_deletions);
+
+                        touched_deletions.forEach(ind => {
+                            let projPoint = getProjectionPoint(pos_left, pos_right, objects[day - 1][cursor[5][0]][1][ind]);
+
+                            // Обновление анимаций
+                            let el_ind = find_el(transitions[day], [cursor[5][0], ind]);
+                            if (el_ind == -1) {
+                                transitions[day].push([[cursor[5][0], ind], [current_point, projPoint]]);
+                            }
+                            else {
+                                console.log("Свершилось обновление!");
+                                transitions[day][el_ind][1][1] = projPoint;
+                            }
+
+                            prev_point = objects[day - 1][cursor[5][0]][1][ind];
+                            if (prev_point.length == 2) {
+                                prev_point.push("deleted");
+                                prev_point.push("deleted");
+                            }
+                            if (prev_point.length == 3) {
+                                prev_point.push("deleted");
+                            }
+                        });
+
+                        objects[day][cursor[5][0]][1].splice(cursor[5][1], 1);
+                        // animShift("minus", cursor[5][1]);
+                        update_objects(objects[day]);
+                    }
+                }
             }
         }
     }
@@ -731,6 +831,23 @@ button_play.addEventListener("click", async (e) => {
 });
 function delay(ms) { 
     return new Promise(resolve => setTimeout(resolve, ms)); 
+}
+
+
+
+// РАБОТА С АНИМАЦИЯМИ
+
+// Сдвиг индексов анимаций
+function animShift(mode, index) {
+    transitions[day].forEach(obj => {
+        // Если точка на линии
+        if (obj[0].length == 2) {
+            if (obj[0][1] >= index) {
+                if (mode == "plus") obj[0][1]++;
+                if (mode == "minus") obj[0][1]--;
+            }
+        }
+    });
 }
 
 // Копирование многомерного массива
