@@ -61,6 +61,9 @@ var button_pressed = 0;
 var cursor = [false];
 var is_overline = false;
 
+// Дата
+var date = getCurrentDate();
+
 
 // СОБЫТИЯ МЫШИ
 canvas.addEventListener("mousedown", function (e) {
@@ -103,24 +106,28 @@ canvas.addEventListener("mousedown", function (e) {
                 // Если растягиваем сегмент
                 if (cursor[1] == "overline") {
                     is_overline = true;
-                    objects[day][cursor[5][0]][1].splice(cursor[5][1] + 1, 0, screenToWorldPoint([x, y]));
+                    let state = screenToWorldPoint([x, y]);
+                    state.push("new");
+                    objects[day][cursor[5][0]][1].splice(cursor[5][1] + 1, 0, state);
+                    for (let i = cursor[5][1] + 1; i < objects[day][cursor[5][0]][1].length; i++)
+                        if (objects[day][cursor[5][0]][1][i][2] != "new") objects[day][cursor[5][0]][1][i][2] += 1;
                     // Добавляем перетянутую точку в предыдущий день
                     if (day != 0) {
                         let ind = cursor[5][1] + 1;
                         let left_ind = cursor[5][1];
                         let right_ind = cursor[5][1] + 1;
-
-                        console.log("Левый: " + left_ind);
-                        console.log("Правый: " + right_ind);
                         // Пробегаемся по индексам из пердыдущего дня чтобы размешать проекции на сегменты, а не в воздухе
-                        while (left_ind > 0 && objects[day - 1][cursor[5][0]][1][left_ind].length > 2  ) {
+                        while (left_ind > 0 && objects[day - 1][cursor[5][0]][1][left_ind][2] == "edited") {
                             left_ind--;
-                            console.log("Ещё налево! " + left_ind);
+                            console.log("Ещё налево " + left_ind);
                         }
-                        while (right_ind < objects[day - 1][cursor[5][0]][1].length - 1 && objects[day - 1][cursor[5][0]][1][right_ind].length > 2) {
+                        while (right_ind < objects[day - 1][cursor[5][0]][1].length - 1 && objects[day - 1][cursor[5][0]][1][right_ind][2] == "edited") {
                             right_ind++;
-                            console.log("Ещё направо! " + right_ind);
+                            console.log("Ещё направо " + right_ind);
                         }
+
+                        console.log("Итого лево " + left_ind);
+                        console.log("Итого право " + right_ind);
 
                         if (right_ind == objects[day - 1][cursor[5][0]][1].length) right_ind = 0;
 
@@ -217,11 +224,13 @@ canvas.addEventListener("mousemove", function (e) {
             // Перемещение сегментов ломаной линии
             else if (cursor[1] == "vertex") {
                 cursor[2] = world_point;
-                objects[day][cursor[5][0]][1][cursor[5][1]] = world_point;
+                objects[day][cursor[5][0]][1][cursor[5][1]][0] = world_point[0];
+                objects[day][cursor[5][0]][1][cursor[5][1]][1] = world_point[1];
             }
             else if (cursor[1] == "overline") {
                 cursor[2] = world_point;
-                objects[day][cursor[5][0]][1][cursor[5][1] + 1] = world_point;
+                objects[day][cursor[5][0]][1][cursor[5][1] + 1][0] = world_point[0];
+                objects[day][cursor[5][0]][1][cursor[5][1] + 1][1] = world_point[1];
             }
         }
 
@@ -281,7 +290,7 @@ canvas.addEventListener("mouseup", function (e) {
 
     map_drag = false;
     
-    // Добавляем анимацию
+    // Добавляем анимацию перемещения вершин
     if (cursor[0] && line_drag && !is_mouse_stable && day > 0) {
         ind = find_el(transitions[day], cursor[5]);
         if (is_points.checked) {
@@ -328,16 +337,9 @@ canvas.addEventListener("mouseup", function (e) {
                 // Иначе (есть анимации)
                 else {
                     // Если удаляется точка, добавленная на этом кадре (всё просто)
-                    let ind = cursor[5][1];
-                    let set_ind = ind;
-                    for (let i = 0; i <= ind; i++) {
-                        if (objects[day - 1][cursor[5][0]][1][i].length >= 4) {
-                            set_ind ++;
-                        }
-                    }
-                    ind = set_ind;
-
-                    if (objects[day - 1][cursor[5][0]][1][ind].length == 3) {
+                    let ind = objects[day][cursor[5][0]][1][cursor[5][1]][2];
+                    
+                    if (ind == "new") {
 
                         console.log("simple delete");
 
@@ -353,16 +355,6 @@ canvas.addEventListener("mouseup", function (e) {
                     }
                     // Если удаляем точку из предыдущего кадра (сложнее, нужно сжимать анимацией)
                     else {
-                        let ind = cursor[5][1];
-                        let set_ind = ind;
-                        for (let i = 0; i <= ind; i++) {
-                            if (objects[day - 1][cursor[5][0]][1][i].length >= 4) {
-                                set_ind++;
-                                console.log("affected " + i);
-                            }
-                        }
-                        ind = set_ind;
-
                         let left_stop_ind = (ind - 1);
                         let right_stop_ind = (ind + 1);
                         
@@ -767,6 +759,7 @@ function update_cursor(mousepos) {
 // Обновление дня
 function update_day() {
     textbox.value = `День ${day} из ${max_day}`;
+    setDate(addDays(date, day));
     update_objects(objects[day]);
 }
 // Предыдущий день
@@ -786,7 +779,15 @@ button_newday.addEventListener("click", (e) => {
     max_day++;
     day = max_day;
     if (is_copy_obj_newday.checked){
-        let newArr = copy(objects[objects.length - 1])
+        let newArr = copy(objects[objects.length - 1]);
+        // Вносим порядковые номера для синхронизации удаления
+        newArr.forEach(obj => {
+            if (obj[0] == "frontline") {
+                for (let i = 0; i < obj[1].length; i++) {
+                    obj[1][i][2] = i;
+                }
+            }
+        });
         objects.push(newArr);
     }
     else objects.push([]);
@@ -864,7 +865,8 @@ function copy(arr) {
 // Сохранение и загрузка из файла
 // Сохранение в файл
 document.getElementById('exportBtn').addEventListener('click', () => { 
-    const jsonString = JSON.stringify([objects, transitions]); 
+    const backgroundImage = window.getComputedStyle(canvas).backgroundImage;
+    const jsonString = JSON.stringify([objects, transitions, date.toISOString(), backgroundImage]); 
     const blob = new Blob([jsonString], { type: 'application/json' }); 
     const url = URL.createObjectURL(blob); 
     const a = document.createElement('a'); 
@@ -879,10 +881,71 @@ document.getElementById('importFile').addEventListener('change', (event) => {
     const reader = new FileReader(); 
     reader.onload = (e) => { 
         const json = JSON.parse(e.target.result); 
-        [objects, transitions] = json;
-        max_day = objects.length;
+        let date_val;
+        let bg_image_val;
+        [objects, transitions, date_val, bg_image_val] = json;
+        canvas.style.backgroundImage = `${bg_image_val}`; 
+        console.log(date_val);
+        date = new Date(date_val);
+        console.log(date);
+        max_day = objects.length - 1;
         day = 0;
-        update_objects(objects[day]);
+        update_day();
     }; 
     reader.readAsText(file); 
+});
+
+
+
+
+// РАБОТА С ДАТОЙ
+// Установка текущей даты
+setDate(date);
+
+
+function getCurrentDate() { 
+    let today = new Date(); 
+    return today;
+}
+
+function setDate(date){
+    let day = String(date.getDate()).padStart(2, '0'); 
+    let month = String(date.getMonth() + 1).padStart(2, '0'); // Январь - это 0! 
+    let year = date.getFullYear(); 
+    let currentDate = `${year}-${month}-${day}`; 
+    document.getElementById('date-el').value = currentDate; 
+}
+
+// Изменение даты на количество дней
+function addDays(date, days) { 
+    let result = new Date(date); 
+    result.setDate(result.getDate() + days); 
+    return result; 
+}
+
+// Изменение даты если нажали на календарь
+document.getElementById('date-el').addEventListener("change", (e) => {
+    console.log("Хуююююю");
+    el_date = new Date(document.getElementById('date-el').value);
+    console.log(el_date);
+    date = addDays(el_date, -day);
+});
+
+
+
+
+// СМЕНА ЗАДНЕГО ФОНА (КАРТИНКИ)
+document.addEventListener('paste', (event) => { 
+    const items = event.clipboardData.items; 
+    for (const item of items) { 
+        if (item.type.indexOf('image') !== -1) { 
+            const blob = item.getAsFile(); 
+            const reader = new FileReader(); 
+            reader.onload = (event) => { 
+                const dataUrl = event.target.result; 
+                canvas.style.backgroundImage = `url(${dataUrl})`; 
+            }; 
+            reader.readAsDataURL(blob); 
+        } 
+    } 
 });
