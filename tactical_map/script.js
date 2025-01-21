@@ -11,6 +11,7 @@ const is_map_drag = document.getElementById("is-map-drag");
 const is_points = document.getElementById("is-pointing");
 const is_draw = document.getElementById("is-draw");
 const is_line = document.getElementById("is-lining");
+const is_smoothing = document.getElementById("is-smooth");
 // Контроллеры анимации
 const button_prev = document.getElementById("prev");
 const button_next = document.getElementById("next");
@@ -67,6 +68,8 @@ var date = getCurrentDate();
 
 // СОБЫТИЯ МЫШИ
 canvas.addEventListener("mousedown", function (e) {
+    if (is_playing) return;
+
     let x = e.offsetX;
     let y = e.offsetY;
 
@@ -167,6 +170,8 @@ canvas.addEventListener("mousedown", function (e) {
     prev_y = y;
 });
 canvas.addEventListener("mousemove", function (e) {
+    if (is_playing) return;
+
     let x = e.offsetX;
     let y = e.offsetY;
 
@@ -286,6 +291,8 @@ canvas.addEventListener("mousemove", function (e) {
     }
 });
 canvas.addEventListener("mouseup", function (e) {
+    if (is_playing) return;
+
     let is_mouse_stable = (e.offsetX == pointer[0] && e.offsetY == pointer[1]);
 
     map_drag = false;
@@ -630,13 +637,52 @@ function update_objects(objects_list) {
             ctx.strokeStyle = obj[2];
             ctx.lineWidth = obj[3];
             ctx.moveTo(obj[1][0], obj[1][1]);
-            obj[1].forEach(point => {
-                screen_point = worldToScreenPoint(point);
-                ctx.lineTo(screen_point[0], screen_point[1]);
-            });
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
+
+            if (!is_smoothing.checked) {
+                // Линейная интерполяция
+                obj[1].forEach(point => {
+                    screen_point = worldToScreenPoint(point);
+                    ctx.lineTo(screen_point[0], screen_point[1]);
+                });
+
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+            else {
+                // Интерполяция кубическими сплайнами (сглаживание)
+                let points = [];
+                obj[1].forEach(point => {
+                    points.push({x : point[0], y : point[1]});
+                });
+                let screen_points = getSmoothCurvePoints(points);
+                screen_points.forEach(p => {ctx.lineTo(p[0], p[1])});
+    
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+    
+                if(!is_playing){
+                    // Прорисовываем опорные точки
+                    ctx.fillStyle = "rgb(255, 128, 0)";
+                    obj[1].forEach(point => {
+                        ctx.beginPath();
+                        let screen_point = worldToScreenPoint(point);
+                        ctx.arc(screen_point[0], screen_point[1], 7, 0, 2 * Math.PI);
+                        ctx.fill();
+                    });
+                    // Прорисовываем вспомогательные линие
+                    ctx.lineWidth = 1;
+                    ctx.strokeStyle = "rgb(62, 22, 7)";
+                    ctx.beginPath();
+                    obj[1].forEach(point => {
+                        let screen_point = worldToScreenPoint(point);
+                        ctx.lineTo(screen_point[0], screen_point[1]);
+                    });
+                    ctx.closePath();
+                    ctx.stroke();
+                }
+            }
         }
     });
     // Отрисовываем курсор
@@ -814,9 +860,13 @@ anim_delay.addEventListener("input", (e) => {
     anim_text.textContent = anim_delay.value * 100;
 });
 
+var is_playing = false;
+
 // Проиграть анимацию
 button_play.addEventListener("click", async (e) => {
+    is_playing = true;
     day = 0;
+    update_day();
     while (day <= max_day) {
         if (day == 0) {
             await delay(anim_delay.value * 100);
@@ -829,6 +879,7 @@ button_play.addEventListener("click", async (e) => {
     }
     day--;
     update_day();
+    is_playing = false;
 });
 function delay(ms) { 
     return new Promise(resolve => setTimeout(resolve, ms)); 
@@ -949,3 +1000,110 @@ document.addEventListener('paste', (event) => {
         } 
     } 
 });
+
+
+// ОБНОВЛЕНИЕ ПТИЧКИ ГЛАДКОСТИ
+is_smoothing.addEventListener("change", (e) => {update_objects(objects[day])});
+
+
+// СПЛАЙН ИНТЕРПОЛЯЦИЯ ЗАМКНУТОГО КОНТУРА
+// Параметризация точек
+function parameterize(points) {
+    const t = [0];
+    for (let i = 1; i < points.length; i++) {
+        const dx = points[i].x - points[i - 1].x;
+        const dy = points[i].y - points[i - 1].y;
+        t.push(t[i - 1] + Math.sqrt(dx * dx + dy * dy));
+    }
+    return t.map(val => val / t[t.length - 1]); // Нормализация
+}
+// Вычисление коэффициентов сплайна
+function calculateCoefficients(values, t) {
+    const n = values.length - 1;
+    const h = Array(n).fill(0).map((_, i) => t[i + 1] - t[i]);
+
+    // Вычисляем систему уравнений
+    const alpha = Array(n).fill(0).map((_, i) => {
+        if (i === 0) return 0;
+        return (3 / h[i] * (values[i + 1] - values[i]) -
+                3 / h[i - 1] * (values[i] - values[i - 1]));
+    });
+
+    const l = Array(n + 1).fill(1);
+    const mu = Array(n).fill(0);
+    const z = Array(n + 1).fill(0);
+
+    for (let i = 1; i < n; i++) {
+        l[i] = 2 * (t[i + 1] - t[i - 1]) - h[i - 1] * mu[i - 1];
+        mu[i] = h[i] / l[i];
+        z[i] = (alpha[i] - h[i - 1] * z[i - 1]) / l[i];
+    }
+
+    const b = Array(n).fill(0);
+    const c = Array(n + 1).fill(0);
+    const d = Array(n).fill(0);
+
+    for (let j = n - 1; j >= 0; j--) {
+        c[j] = z[j] - mu[j] * c[j + 1];
+        b[j] = (values[j + 1] - values[j]) / h[j] -
+               h[j] * (c[j + 1] + 2 * c[j]) / 3;
+        d[j] = (c[j + 1] - c[j]) / (3 * h[j]);
+    }
+
+    return { a: values.slice(0, n), b, c: c.slice(0, n), d, h };
+}
+// Вычисление значения сплайна
+function evaluateSpline(coeffs, t, tValues, tNorm) {
+    const n = tValues.length - 1;
+
+    let i = n - 1;
+    for (let j = 0; j < n; j++) {
+        if (tNorm >= tValues[j] && tNorm <= tValues[j + 1]) {
+            i = j;
+            break;
+        }
+    }
+
+    const x = tNorm - tValues[i];
+    return coeffs.a[i] + coeffs.b[i] * x +
+           coeffs.c[i] * x ** 2 + coeffs.d[i] * x ** 3;
+}
+// Интерполяция замкнутого пути
+function interpolateClosedCurve(points, resolution = 200) {
+    const t = parameterize(points);
+    const xCoeffs = calculateCoefficients(points.map(p => p.x), t);
+    const yCoeffs = calculateCoefficients(points.map(p => p.y), t);
+
+    const interpolatedPoints = [];
+    for (let i = 0; i < resolution; i++) {
+        const tNorm = i / (resolution - 1);
+        const x = evaluateSpline(xCoeffs, t, t, tNorm);
+        const y = evaluateSpline(yCoeffs, t, t, tNorm);
+        interpolatedPoints.push({ x, y });
+    }
+    return interpolatedPoints;
+}
+// Рисование замкнутого пути
+function drawCurve(ctx, points) {
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    points.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.closePath();
+    ctx.strokeStyle = 'blue';
+    ctx.fillStyle = "rgba(255, 0, 0, 0.5)"
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+}
+function getSmoothCurvePoints(points) {
+    // Основной код
+    const interpolatedPoints = interpolateClosedCurve(points, 500);
+    
+    // Мировые точки в экранные
+    screen_points = [];
+    interpolatedPoints.forEach(p => {
+        screen_points.push(worldToScreenPoint([p.x, p.y]));
+    });
+
+    return screen_points;
+}
