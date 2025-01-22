@@ -122,15 +122,10 @@ canvas.addEventListener("mousedown", function (e) {
                         // Пробегаемся по индексам из пердыдущего дня чтобы размешать проекции на сегменты, а не в воздухе
                         while (left_ind > 0 && objects[day - 1][cursor[5][0]][1][left_ind][2] == "edited") {
                             left_ind--;
-                            console.log("Ещё налево " + left_ind);
                         }
                         while (right_ind < objects[day - 1][cursor[5][0]][1].length - 1 && objects[day - 1][cursor[5][0]][1][right_ind][2] == "edited") {
                             right_ind++;
-                            console.log("Ещё направо " + right_ind);
                         }
-
-                        console.log("Итого лево " + left_ind);
-                        console.log("Итого право " + right_ind);
 
                         if (right_ind == objects[day - 1][cursor[5][0]][1].length) right_ind = 0;
 
@@ -139,7 +134,6 @@ canvas.addEventListener("mousedown", function (e) {
                                     screenToWorldPoint([x, y])
                                 );
                         projPoint.push("edited");
-                        console.log(projPoint);
                         
                         objects[day - 1][cursor[5][0]][1].splice(ind, 0, projPoint);
 
@@ -310,8 +304,6 @@ canvas.addEventListener("mouseup", function (e) {
         }
         if (is_line.checked) {
             if (is_overline) {
-                console.log(cursor);
-                console.log(objects[day - 1][cursor[5][0]][1][cursor[5][1]]);
                 transitions[day].push([[cursor[5][0], cursor[5][1]], [[objects[day - 1][cursor[5][0]][1][cursor[5][1]][0], objects[day - 1][cursor[5][0]][1][cursor[5][1]][1]], screenToWorldPoint([e.offsetX, e.offsetY])]]);
             }
             else {
@@ -348,7 +340,6 @@ canvas.addEventListener("mouseup", function (e) {
                     
                     if (ind == "new") {
 
-                        console.log("simple delete");
 
                         objects[day][cursor[5][0]][1].splice(cursor[5][1], 1);
                         objects[day - 1][cursor[5][0]][1].splice(cursor[5][1], 1);
@@ -370,32 +361,24 @@ canvas.addEventListener("mouseup", function (e) {
 
                         let touched_deletions = [ind];
 
-                        console.log("Слева: " + left_stop_ind);
-                        console.log("Справа: " + right_stop_ind);
 
                         // Ищем края нового удаления (возможно, через предыдущие удаления)
                         while (objects[day - 1][cursor[5][0]][1][left_stop_ind].length >= 4) {
                             touched_deletions.push(left_stop_ind);
                             left_stop_ind--;
-                            console.log("Ещё налево, стало " + left_stop_ind);
                             if (left_stop_ind == -1) left_stop_ind = objects[day - 1][cursor[5][0]][1].length - 1;
                         }
                         while (objects[day - 1][cursor[5][0]][1][right_stop_ind].length >= 4) {
                             touched_deletions.push(right_stop_ind);
                             right_stop_ind++;
-                            console.log("Ещё направо, стало " + right_stop_ind);
                             if (right_stop_ind == objects[day - 1][cursor[5][0]][1].length) right_stop_ind = 0;
                         }
-
-                        console.log("Слева: " + left_stop_ind);
-                        console.log("Справа: " + right_stop_ind);
 
                         // Схлопываем это и предыдущее удаление
                         let pos_left = objects[day - 1][cursor[5][0]][1][left_stop_ind];
                         let pos_right = objects[day - 1][cursor[5][0]][1][right_stop_ind];
                         let current_point = objects[day - 1][cursor[5][0]][1][ind];
 
-                        console.log(touched_deletions);
 
                         touched_deletions.forEach(ind => {
                             let projPoint = getProjectionPoint(pos_left, pos_right, objects[day - 1][cursor[5][0]][1][ind]);
@@ -406,7 +389,6 @@ canvas.addEventListener("mouseup", function (e) {
                                 transitions[day].push([[cursor[5][0], ind], [current_point, projPoint]]);
                             }
                             else {
-                                console.log("Свершилось обновление!");
                                 transitions[day][el_ind][1][1] = projPoint;
                             }
 
@@ -603,10 +585,11 @@ function instantiate(object, position, local_offset, color, linewidth) {
     ctx.stroke();
     objects[day].push([object, position, screen_position, local_offset, color, linewidth]);
 }
-
 // ОБНОВЛЕНИЕ
-function update_objects(objects_list) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+var prev_day = null;
+function update_objects(objects_list, is_clearing = true) {
+    ctx.globalAlpha = 0.5;
+    if (is_clearing) ctx.clearRect(0, 0, canvas.width, canvas.height);
     objects_list.forEach(obj => {
         if (obj[0] == "point"){
             let screen_position = worldToScreenPoint(obj[1])
@@ -633,7 +616,8 @@ function update_objects(objects_list) {
         }
         else if (obj[0] == "frontline"){
             ctx.beginPath();
-            ctx.fillStyle = "rgba(255, 0, 0, 0.5)";
+            
+            ctx.fillStyle = color_el.value;
             ctx.strokeStyle = obj[2];
             ctx.lineWidth = obj[3];
             ctx.moveTo(obj[1][0], obj[1][1]);
@@ -648,9 +632,32 @@ function update_objects(objects_list) {
                 ctx.closePath();
                 ctx.fill();
                 ctx.stroke();
+
+                // Рисование изменений редактирования
+                if (day > 0 && prev_day != null) {
+                    let points_thisday = copy(obj[1]);
+                    let points_prevday = copy(prev_day[0][1]);
+                    points_prevday.reverse();
+                    let combined_path = [...points_thisday, ...points_prevday];
+
+                    ctx.beginPath();
+                    ctx.moveTo(combined_path[0], combined_path[1]);
+                    ctx.fillStyle = "rgb(255, 255, 0)";
+                    combined_path.forEach(p => {
+                        let s_pos = worldToScreenPoint([p[0], p[1]]);
+                        ctx.lineTo(s_pos[0], s_pos[1]);
+                    });
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                }
             }
             else {
                 // Интерполяция кубическими сплайнами (сглаживание)
+                ctx.lineWidth = width_el.value;
+                ctx.strokeStyle = color_el.value;
+                ctx.globalAlpha = 1;
+
                 let points = [];
                 obj[1].forEach(point => {
                     points.push({x : point[0], y : point[1]});
@@ -659,7 +666,7 @@ function update_objects(objects_list) {
                 screen_points.forEach(p => {ctx.lineTo(p[0], p[1])});
     
                 ctx.closePath();
-                ctx.fill();
+                // ctx.fill();
                 ctx.stroke();
     
                 if(!is_playing){
@@ -684,6 +691,7 @@ function update_objects(objects_list) {
                 }
             }
         }
+        prev_el = obj;
     });
     // Отрисовываем курсор
     if (cursor[0]) {
@@ -710,6 +718,10 @@ function update_objects(objects_list) {
     }
 }
 
+color_el.addEventListener("input", (e) => {
+    update_day();
+});
+
 var animation_steps_per_frame = 100;
 
 // [[indexed],        [start_pos, new_pos]];
@@ -719,8 +731,26 @@ var animation_steps_per_frame = 100;
 async function translate() {
     let day_animations = transitions[day];
     let day_objects = copy(objects[day - 1]);
+
+    if (is_smoothing.checked) day_objects.splice(0, 1);
+
     let step_delay = anim_delay.value * 100 / (animation_steps_per_frame + 1)
+
+    let prev_points = objects[day - 1][0][1].map(item => {return {x : item[0], y : item[1]}});
+    let this_points = objects[day][0][1].map(item => {return {x : item[0], y : item[1]}});
+    
+    if (day == 2) {
+        console.log(prev_points);
+        console.log(this_points);
+    }
+
+    let curved_front_prev_day_points = getSmoothCurvePoints(prev_points);
+    let curved_front_this_day_points = getSmoothCurvePoints(this_points);
+    let state = copy(curved_front_prev_day_points);
+
     for(let i = 0; i <= animation_steps_per_frame; i++) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
         let t = i / animation_steps_per_frame;
         day_animations.forEach(obj => {
             // точка
@@ -729,10 +759,28 @@ async function translate() {
             }
             // вершина линии
             else {
-                day_objects[obj[0][0]][1][obj[0][1]] = lerp(obj[1][0], obj[1][1], t);
+                // Если линия не сглажена (анимируем по трансформациям)
+                if (!is_smoothing.checked) {
+                    day_objects[obj[0][0]][1][obj[0][1]] = lerp(obj[1][0], obj[1][1], t);
+                }
             }
         });
-        update_objects(day_objects);
+        // Если линия сглажена (анимируем по интерполяции)
+        if (is_smoothing.checked) {
+            ctx.beginPath();
+            ctx.globalAlpha = 1;
+
+            ctx.strokeStyle = color_el.value;
+            ctx.lineWidth = width_el.value;
+            ctx.moveTo(state[0].x, state[0].y);
+            for (let i = 0; i < curved_front_prev_day_points.length; i++) {
+                let p = lerp(curved_front_prev_day_points[i], curved_front_this_day_points[i], t);
+                ctx.lineTo(p[0], p[1]);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        }
+        update_objects(day_objects, false);
         await delay(step_delay);
     }
 }
@@ -812,18 +860,22 @@ function update_day() {
 button_prev.addEventListener("click", (e) => {
     if (day <= 0) return;
     day--;
+    if (day != 0) prev_day = copy(objects[day - 1]);
+    else prev_day = 0;
     update_day();
 });
 // Следующий день
 button_next.addEventListener("click", (e) => {
     if (day >= max_day) return;
     day++;
+    prev_day = copy(objects[day - 1]);
     update_day();
 });
 // Создать новый день
 button_newday.addEventListener("click", (e) => {
     max_day++;
     day = max_day;
+    prev_day = copy(objects[day - 1]);
     if (is_copy_obj_newday.checked){
         let newArr = copy(objects[objects.length - 1]);
         // Вносим порядковые номера для синхронизации удаления
@@ -865,7 +917,6 @@ var is_playing = false;
 // Проиграть анимацию
 button_play.addEventListener("click", async (e) => {
     is_playing = true;
-    day = 0;
     update_day();
     while (day <= max_day) {
         if (day == 0) {
@@ -875,6 +926,7 @@ button_play.addEventListener("click", async (e) => {
             await translate();
         }
         update_day();
+        prev_day = copy(objects[day]);
         day++;
     }
     day--;
@@ -936,9 +988,7 @@ document.getElementById('importFile').addEventListener('change', (event) => {
         let bg_image_val;
         [objects, transitions, date_val, bg_image_val] = json;
         canvas.style.backgroundImage = `${bg_image_val}`; 
-        console.log(date_val);
         date = new Date(date_val);
-        console.log(date);
         max_day = objects.length - 1;
         day = 0;
         update_day();
@@ -976,9 +1026,7 @@ function addDays(date, days) {
 
 // Изменение даты если нажали на календарь
 document.getElementById('date-el').addEventListener("change", (e) => {
-    console.log("Хуююююю");
     el_date = new Date(document.getElementById('date-el').value);
-    console.log(el_date);
     date = addDays(el_date, -day);
 });
 
@@ -1013,7 +1061,9 @@ function parameterize(points) {
     for (let i = 1; i < points.length; i++) {
         const dx = points[i].x - points[i - 1].x;
         const dy = points[i].y - points[i - 1].y;
-        t.push(t[i - 1] + Math.sqrt(dx * dx + dy * dy));
+        let dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist == 0) dist = 0.00001;
+        t.push(t[i - 1] + dist);
     }
     return t.map(val => val / t[t.length - 1]); // Нормализация
 }
