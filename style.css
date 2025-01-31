@@ -1,0 +1,17 @@
+body {
+    margin: 0;
+    padding: 0;
+}
+
+#main-map {
+    border: 3px solid black;
+    margin: 0;
+    background-image: url("http://www.world-map.ru/world-map-geo-big.jpg");
+    /* background-image: url("http://www.svali.ru/pic/pictures/91/r_m_1dfeb5ef96f37a226d3777fff66f991b.jpg"); */
+    /* background-image: url("https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/4cdbad7c-1957-46e4-a31f-9054308cf8d7/ddh6ke1-6b64d78d-e0b5-4526-b3fa-db153be6b754.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7InBhdGgiOiJcL2ZcLzRjZGJhZDdjLTE5NTctNDZlNC1hMzFmLTkwNTQzMDhjZjhkN1wvZGRoNmtlMS02YjY0ZDc4ZC1lMGI1LTQ1MjYtYjNmYS1kYjE1M2JlNmI3NTQucG5nIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmZpbGUuZG93bmxvYWQiXX0.bP2kwcxyvetGNuTH3xj51Vil8lwTkYlQc0yf9ShoRZs"); */
+    background-size:1000px;
+}
+
+.mode-selector {
+    margin: 10px;
+}
